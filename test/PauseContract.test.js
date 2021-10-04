@@ -37,8 +37,10 @@ contract('PauseContract', async (accountsPayload) => {
       } catch(err) {
         assert.notEqual(err.message, "assert.fail()", "caller not owner");
       }
-    });
-    it('should revert non-deployer attempt to register new user', async () => {
+    })
+
+
+    it('Should revert non-deployer attempt to register new user', async () => {
       try {
         await pauseContract.registerUser(addr2, true, {from: addr1})
         assert.fail()
@@ -46,11 +48,11 @@ contract('PauseContract', async (accountsPayload) => {
       } catch(err) {
         assert.notEqual(err.message, "assert.fail()", "caller not owner");
       }
-    });
+    })
   })
 
-  contract('Register User', () => {
-    it('Allows owner to register new user', async() => {
+  contract('Register & deregister User', () => {
+    it('Allows owner to register & deregister user', async() => {
       const userRegistrationStatusBefore = await pauseContract.isUserRegistered(addr1)
       const userAdminStatusBefore = await pauseContract.isUserAdmin(addr1)
 
@@ -62,7 +64,7 @@ contract('PauseContract', async (accountsPayload) => {
       assert.isFalse(userRegistrationStatusBefore)
       assert.isFalse(userAdminStatusBefore)
       
-      const registrationResult = await pauseContract.registerUser(addr1, true, {from: deployer})
+      const registrationResult = await pauseContract.registerUser(addr1, {from: deployer})
       
       const userRegistrationStatusAfter = await pauseContract.isUserRegistered(addr1)
       const userAdminStatusAfter = await pauseContract.isUserAdmin(addr1)
@@ -78,7 +80,110 @@ contract('PauseContract', async (accountsPayload) => {
         console.log({evHere: ev})
         return ev.account === addr1 && ev.registered === true
       })
+
+      /**
+       *********************************deregister user******************************
+       
+       *****************************************************************************
+      */
+      
+      // check registration status of registered account before deregister call
+      const getRegistrationStatusBefore = async(payload) => await pauseContract.isUserRegistered(payload)
+      const getAdminStatusBefore = async(payload) =>  await pauseContract.isUserAdmin(payload)
+      assert.isTrue(await getRegistrationStatusBefore(addr1))
+      assert.isTrue(await getAdminStatusBefore(addr1))
+      
+      // deregister user
+      const deregisterResult = await pauseContract.deregisterUser(addr1, {from: deployer})
+      const getRegistrationStatusAfter = async(payload) => await pauseContract.isUserRegistered(payload)
+      const getAdminStatusAfter =  async(payload) => await pauseContract.isUserAdmin(payload)
+
+      console.log('registration status after  deregister', await getRegistrationStatusAfter(addr1))
+      console.log('admin status after deregister', await getAdminStatusAfter(addr1))
+
+
+      assert.isFalse(await getAdminStatusAfter(addr1))
+      assert.isFalse(await getRegistrationStatusAfter(addr1))
+
+    
+      truffleAssert.eventEmitted(deregisterResult, 'LogDeregistered', (ev) => {
+        console.log({evHere: ev})
+        return ev.account === addr1 && ev.deregistered === false
+      })
+    })
+  })
+
+  contract('Set operational status', () => {
+    it('Sets operational status to false only when the tri-party threshold is reached', async() => {
+
+      const operationalStatusBefore = await pauseContract.getOperationalStatus()
+      const operationalStatusAfter = !operationalStatusBefore
+
+      const getRegistrationStatusBefore = async(payload) => await pauseContract.isUserRegistered(payload)
+      const getRegistrationStatusAfter = async(payload) => await pauseContract.isUserRegistered(payload)
+
+      
+      const getAdminStatusBefore = async(payload) =>  await pauseContract.isUserAdmin(payload)
+      const getAdminStatusAfter =  async(payload)=> await pauseContract.isUserAdmin(payload)
+
+
+      const isAdmin = async(payload) => await pauseContract.isUserAdmin(payload)
+
+      console.log('registration status before ', await getRegistrationStatusBefore(addr1))
+      console.log('admin status before', await getAdminStatusBefore(addr1))
+      
+      assert.isFalse(await getRegistrationStatusBefore(addr1))
+      assert.isFalse(await getRegistrationStatusBefore(addr2))
+      
+      
+      const registrationResult1 = await pauseContract.registerUser(addr1, {from: deployer})
+      const registrationResult2 = await pauseContract.registerUser(addr2, {from: deployer})
+      const registrationResult3 = await pauseContract.registerUser(addr3, {from: deployer})
+      const registrationResult4 = await pauseContract.registerUser(addr4, {from: deployer})
+
+
+
+      // check if admin status is registered following account registration
+      console.log('registration status after', await getRegistrationStatusAfter(addr1))
+      console.log('admin status after', await getAdminStatusAfter(addr1))
+      assert.isTrue(await getAdminStatusAfter(addr1))
+      assert.isTrue(await getAdminStatusAfter(addr2))
+      assert.isTrue(await getAdminStatusAfter(addr3))
+      assert.isTrue(await getAdminStatusAfter(addr4))
+      
+      // setting operational status to false
+      const setOperationalStatus1 = await pauseContract.setOperationalStatus(false, {from: addr1})
+      const setOperationalStatus2 = await pauseContract.setOperationalStatus(false, {from: addr2})
+      const setOperationalStatus3 = await pauseContract.setOperationalStatus(false, {from: addr3})
+      // const setOperationalStatus4 = await pauseContract.setOperationalStatus(false, {from: addr4})
+      
+
+      // check the operational status after tir-party threshold is reached
+      assert.isFalse(operationalStatusAfter)
+
+      // check emitted registration event
+      truffleAssert.eventEmitted(registrationResult1, 'LogRegistered', (ev) => {
+        console.log({evHere: ev})
+        return ev.account === addr1 && ev.registered === true
+      })
+      
+      // check event emitted after admin1 set operation call is true 
+      truffleAssert.eventEmitted(setOperationalStatus1, 'LogStatusChanged', (ev) => {
+        console.log({statusChangedHere: ev})
+        return ev.status === true
+      })
+
+      // check event emitted after admin2 set operation call is true 
+      truffleAssert.eventEmitted(setOperationalStatus2, 'LogStatusChanged', (ev) => {
+        console.log({statusChangedHere: ev})
+        return ev.status === true
+      })
+
+      // check event emitted after admin3 set operation call is false following successful operational status change from true to false
+      truffleAssert.eventEmitted(setOperationalStatus3, 'LogStatusChanged', (ev) => {
+        console.log({statusChangedHere: ev})
+        return ev.status === false
+      })
     })
   })
 });
- 
